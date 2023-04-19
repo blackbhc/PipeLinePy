@@ -47,7 +47,7 @@ class single_snapshot_partner:
         self.__bar_semi_length = None # the half bar length, in [kpc]
         self.get_bar_semi_length = lambda: self.__bar_semi_length
         self.__buckling_strength = None # the buckling strength
-        self.get_buckling_strenth = lambda: self.__buckling_strength
+        self.get_buckling_strength = lambda: self.__buckling_strength
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
         self.__has_potential = False # check whther there are potential datasets
@@ -223,3 +223,19 @@ class single_snapshot_partner:
 
         self.__bar_strength = abs(numerator / denominator)
         return self.get_bar_strength()
+
+    
+    def calculate_buckling_strength(self, region_size=100000):
+        """
+        Calculate the buckling strength parameter.
+
+        region_size: only particles with cylindrical radius < region_size are quantified.
+        """
+        index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
+        
+        numerator = (self.__cylindrical_coordiantes[:, 2] * self.__masses[index] *
+                     np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
+        denominator = self.__masses[index].sum()
+
+        self.__buckling_strength = abs(numerator / denominator)
+        return self.get_buckling_strength()
