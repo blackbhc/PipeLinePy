@@ -16,7 +16,7 @@ class single_snapshot_partner:
 
         autoanalysis: automatically finish the analysis of the snapshot
         """
-        print("Initializing the single snapshot partner object ...")
+        print("Initializing the single snapshot partner object ...\n")
         # defensive part: check whether there is the target file
         try:
             self.snapshot = h5py.File(dir+'/'+filename, 'r')
@@ -37,13 +37,13 @@ class single_snapshot_partner:
         # the model statistical quantifications
         self.__system_center = np.array([0, 0, 0]) # the center of the system
         self.get_system_center = lambda: self.__system_center # API to get the center of the system
-        self.__major_axis = 0 # the azimuthal angle of major axis, in [rad]
-        self.get_major_axis = lambda: self.__major_axis
-        self.__bar_strength = 0 # the bar strength
+        self.__major_axis_angle = 0 # the azimuthal angle of major axis, in [rad]
+        self.get_major_axis_angle = lambda: self.__major_axis
+        self.__bar_strength = None # the bar strength
         self.get_bar_strength = lambda: self.__bar_strength
-        self.__bar_semi_length = 0 # the half bar length, in [kpc]
+        self.__bar_semi_length = None # the half bar length, in [kpc]
         self.get_bar_semi_length = lambda: self.__bar_semi_length
-        self.__buckling_strength = 0 # the buckling strength
+        self.__buckling_strength = None # the buckling strength
         self.get_buckling_strenth = lambda: self.__buckling_strength
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
@@ -64,7 +64,7 @@ class single_snapshot_partner:
             self.recenter()
             self.calculate_cylindrical_coordinates()
 
-        print("Done!\n")
+        print("Initialization done!\n")
 
 
     def readdata(self, target_datasets=None):
@@ -100,7 +100,7 @@ class single_snapshot_partner:
             self.__potentials = np.squeeze(np.column_stack(self.__potentials))
         # read in potentials if the snapshot has potential information
 
-        print("Done!\n")
+        print("Read in datasets done!\n")
 
 
     def recenter(self, sphere_size=None, box_size=None, MAXLOOP=1000):
@@ -167,7 +167,7 @@ class single_snapshot_partner:
         # the API to return the convergence status of the recentering
         self.recentered = True
 
-        print("Done!\n")
+        print("Recentering done!\n")
 
 
     def calculate_cylindrical_coordinates(self):
@@ -196,7 +196,7 @@ class single_snapshot_partner:
         Phis[ np.where(Phis<0)[0] ] += np.pi*2 # normalized the range to [0, 2pi]
 
         self.__cylindrical_coordiantes = np.column_stack((Rs, Phis, self.__coordinates[:, 2]-self.__system_center[2]))
-        print("Done!\n")
+        print("Calculate cylindrical coordiantes done!\n")
 
 
     def calculate_bar_length(self, disk_size=None):
@@ -207,15 +207,16 @@ class single_snapshot_partner:
         """
 
 
-    def calculate_bar_strength(self, region_size):
+    def calculate_bar_strength(self, region_size=100000):
         """
         Calculate the bar strength parameter.
 
         region_size: only particles with cylindrical radius < region_size are quantified.
         """
-        index = np.where( self.__cylindrical_coordiantes[:,0] < region_size)[0]
+        index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
+        
+        numerator = self.__masses[index] * np.exp(2j * self.__cylindrical_coordiantes[index, 1]).sum()
+        denominator = self.__masses[index].sum()
 
-
-
-
-
+        self.__bar_strength = abs(numerator / denominator)
+        return self.get_bar_strength()
