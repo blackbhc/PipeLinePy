@@ -5,6 +5,8 @@ import h5py
 class single_snapshot_partner:
     """
     Util class to analysis single hdf5 snapshot file.
+
+    Note: the code will using the internal units of the snapshot file.
     """
     def __init__(self, filename, dir='.', target_datasets = [], autoanalysis=True):
         """
@@ -15,6 +17,7 @@ class single_snapshot_partner:
         target_datasets: a list/tuple of strs, specify the interested datasets (PartType0, for example), default=[].
 
         autoanalysis: automatically finish the analysis of the snapshot
+
         """
         print("Initializing the single snapshot partner object ...\n")
         # defensive part: check whether there is the target file
@@ -215,7 +218,7 @@ class single_snapshot_partner:
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
-        numerator = self.__masses[index] * np.exp(2j * self.__cylindrical_coordiantes[index, 1]).sum()
+        numerator = (self.__masses[index] * np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
         denominator = self.__masses[index].sum()
 
         self.__bar_strength = abs(numerator / denominator)
