@@ -16,6 +16,7 @@ class single_snapshot_partner:
 
         autoanalysis: automatically finish the analysis of the snapshot
         """
+        print("Initializing the single snapshot partner object ...")
         # defensive part: check whether there is the target file
         try:
             self.snapshot = h5py.File(dir+'/'+filename, 'r')
@@ -61,6 +62,9 @@ class single_snapshot_partner:
             # readin data
             self.readdata()
             self.recenter()
+            self.calculate_cylindrical_coordinates()
+
+        print("Done!\n")
 
 
     def readdata(self, target_datasets=None):
@@ -68,6 +72,8 @@ class single_snapshot_partner:
         Read in the data of interested datasets (specified by target_datatets) from snapshot files.
         Note: you can overwrite the target_datasets in this function, if you give a none empty value to it at here.
         """
+        print("Reading in the target datasets ...")
+
         if (target_datasets):
             # defensive part: check whether there is(are) the target dataset(s)
             for target in self.target_datasets:
@@ -75,10 +81,26 @@ class single_snapshot_partner:
                     raise KeyError( "dataset <{}> not found in the file <{}>".format(target, dir+'/'+filename) ) 
             self.target_datasets = target_datasets
             
-
         self.data = []
         for target in self.target_datasets:
             self.data.append(self.snapshot[target])
+
+        # read in the coordinates and masses target particles
+        self.__coordinates = []; self.__masses = []
+        for subset in self.data:
+            self.__coordinates.append(subset["Coordinates"][...])
+            self.__masses.append(subset["Masses"][...])
+        self.__coordinates = np.row_stack(self.__coordinates)
+        self.__masses = np.squeeze(np.column_stack(self.__masses))
+
+        if self.has_potential():
+            self.__potentials = []
+            for subset in self.data:
+                self.__potentials.append(subset["Potential"][...])
+            self.__potentials = np.squeeze(np.column_stack(self.__potentials))
+        # read in potentials if the snapshot has potential information
+
+        print("Done!\n")
 
 
     def recenter(self, sphere_size=None, box_size=None, MAXLOOP=1000):
@@ -94,20 +116,8 @@ class single_snapshot_partner:
 
         MAXLOOP: the max times of the loop for recentering
         """
-        coordinates = []; masses = []
-        for subset in self.data:
-            coordinates.append(subset["Coordinates"][...])
-            masses.append(subset["Masses"][...])
-        coordinates = np.row_stack(coordinates)
-        masses = np.squeeze(np.column_stack(masses))
-        # use the coordinates and masses of targer particles
-
-        if self.has_potential():
-            potentials = []
-            for subset in self.data:
-                potentials.append(subset["Potential"][...])
-            potentials = np.squeeze(np.column_stack(potentials))
-        # read in potentials if the snapshot has potential information
+        print("Recentering the system ...")
+        self.recentered = False; self.get_recenter_status = lambda: self.recentered # whether have recentered
 
         variation = 1000
         # the variation of the system center in [kpc] (default base unit of the distance in the snapshot)
@@ -123,24 +133,24 @@ class single_snapshot_partner:
             old = self.__system_center
             # calculate the index of the region, which will be used to calculate the symtem center
             if sphere_size:
-                index = np.where( np.linalg.norm(coordinates - self.__system_center, axis=1, ord=2) <= sphere_size)[0]
+                index = np.where( np.linalg.norm(self.__coordinates - self.__system_center, axis=1, ord=2) <= sphere_size)[0]
                 # index: inside a sphere
             elif box_size:
-                index = np.where( np.abs( (coordinates - self.__system_center)[:, 0] ) <= box_size/2)[0]
-                index = index[np.where( np.abs( (coordinates - self.__system_center)[index, 1] ) <= box_size/2)[0]]
-                index = index[np.where( np.abs( (coordinates - self.__system_center)[index, 2] ) <= box_size/2)[0]]
+                index = np.where( np.abs( (self.__coordinates - self.__system_center)[:, 0] ) <= box_size/2)[0]
+                index = index[np.where( np.abs( (self.__coordinates - self.__system_center)[index, 1] ) <= box_size/2)[0]]
+                index = index[np.where( np.abs( (self.__coordinates - self.__system_center)[index, 2] ) <= box_size/2)[0]]
             else:
-                index = [i for i in range(len(masses))] # the full index
+                index = [i for i in range(len(self.__masses))] # the full index
 
             if self.has_potential():
-                potentials_sorted = potentials*1.0
+                potentials_sorted = self.__potentials*1.0
                 potentials_sorted.sort()
                 bounded_boundary = potentials_sorted[ int( len(potentials_sorted) * 0.01 ) - 1 ]
                 # the boundary of the most bounded particles
-                index = np.array(index)[ np.where( potentials[index]<=bounded_boundary )[0] ]
+                index = np.array(index)[ np.where( self.__potentials[index]<=bounded_boundary )[0] ]
 
-            cur_coord = coordinates[index, :]
-            cur_mass = masses[index]
+            cur_coord = self.__coordinates[index, :]
+            cur_mass = self.__masses[index]
             new = np.sum( cur_coord * np.column_stack( (cur_mass, cur_mass, cur_mass) ), axis = 0 ) / np.sum(cur_mass)
             self.__system_center = new
             variation = np.linalg.norm(new - old, ord=2)
@@ -150,6 +160,44 @@ class single_snapshot_partner:
         if loop == MAXLOOP:
             print("""Warning: the recenter process has not converged yet! You may need to modify the value of
                   sphere_size or box_size or MAXLOOP.""")
+            self.__recenter_convergent = False
+        else:
+            self.__recenter_convergent = True
+        self.recenter_converges_yes = lambda: self.__recenter_convergent
+        # the API to return the convergence status of the recentering
+        self.recentered = True
+
+        print("Done!\n")
+
+
+    def calculate_cylindrical_coordinates(self):
+        """
+        Calculate the cylindrical coordinates of the system particles, put them into self.__cylindrical_coordiantes.
+
+        Note: the cylindrical coordiantes are all w.r.t to the system center after recentering.
+        """
+        print("Calculating the cylindrical coordinates of the system ...")
+        if not(self.get_recenter_status): self.recenter() # recenter the system if haven't done it
+
+        Rs = np.linalg.norm((self.__coordinates - self.__system_center)[:, :2], axis=1, ord=2) # R of (R, Phi, z)
+        
+        if 0 in Rs:
+            # check whether there is a particle at the origin (system center), which means R<1e-3
+            index = np.where( Rs>1e-3 )[0]
+            Phis = np.arcsin( (self.__coordinates[index, 1]-self.__system_center[1])/Rs[index] )
+            Phis = list(Phis)
+            for id in np.where(Rs<=1e-3)[0]:
+                Phis.insert(id, np.random.rand()*np.pi*2)
+                # deal with R=0 particle(s) with random azimuthal angles
+            Phis = np.array(Phis)
+        else:
+            Phis = np.arcsin( (self.__coordinates[:, 1]-self.__system_center[1])/Rs )
+
+        Phis[ np.where(Phis<0)[0] ] += np.pi*2 # normalized the range to [0, 2pi]
+
+        self.__cylindrical_coordiantes = np.column_stack((Rs, Phis, self.__coordinates[:, 2]-self.__system_center[2]))
+        print("Done!\n")
+
 
     def calculate_bar_length(self, disk_size=None):
         """
@@ -159,7 +207,15 @@ class single_snapshot_partner:
         """
 
 
-    def calculate_bar_strength(self):
+    def calculate_bar_strength(self, region_size):
         """
         Calculate the bar strength parameter.
+
+        region_size: only particles with cylindrical radius < region_size are quantified.
         """
+        index = np.where( self.__cylindrical_coordiantes[:,0] < region_size)[0]
+
+
+
+
+
