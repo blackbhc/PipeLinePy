@@ -233,7 +233,7 @@ class single_snapshot_partner:
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
-        numerator = (self.__cylindrical_coordiantes[:, 2] * self.__masses[index] *
+        numerator = (self.__cylindrical_coordiantes[index, 2] * self.__masses[index] *
                      np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
         denominator = self.__masses[index].sum()
 
