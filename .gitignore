@@ -3,3 +3,4 @@ tests
 test
 test.py
 temp.py
+*.hdf5
