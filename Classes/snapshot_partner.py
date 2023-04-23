@@ -6,7 +6,7 @@ class single_snapshot_partner:
     """
     Util class to analysis single hdf5 snapshot file.
 
-    Note: the code will using the internal units of the snapshot file.
+    Note: the code will use the internal units of the snapshot file.
     """
     def __init__(self, filename, dir='.', target_datasets = [], autoanalysis=True):
         """
@@ -239,3 +239,8 @@ class single_snapshot_partner:
 
         self.__buckling_strength = abs(numerator / denominator)
         return self.get_buckling_strength()
+
+
+    def calculate_fourier_coefficients(self, minradius=0.0, maxradius=20, bins=21, inlog=False):
+        """
+        Calculate the fourier
