@@ -14,7 +14,8 @@ class single_snapshot_partner:
 
         dir: str, the directory of the snapshot file, default = "./".
 
-        target_datasets: a list/tuple of strs, specify the interested datasets (PartType0, for example), default=[].
+        target_datasets: a list/tuple/numpy.array of strs, specify the interested datasets (PartType0, for example), 
+        default=[].
 
         autoanalysis: automatically finish the analysis of the snapshot
 
@@ -210,7 +211,7 @@ class single_snapshot_partner:
         """
 
 
-    def calculate_bar_strength(self, region_size=100000):
+    def calculate_bar_strength(self, region_size=15):
         """
         Calculate the bar strength parameter.
 
@@ -243,4 +244,41 @@ class single_snapshot_partner:
 
     def calculate_fourier_coefficients(self, minradius=0.0, maxradius=20, bins=21, inlog=False):
         """
-        Calculate the fourier
+        Calculate the fourier coefficients A2, A4 ... for annuluses in the face-on image of the system.
+
+        minradius: the inner most radius for the calculation.
+
+        maxradius: the outer most radius for the calculation.
+
+        bins: binnum of the annuluses during calculation.
+
+        inlog: if True, the bins will be linear bewteen lg(minradius) and lg(maxradius)
+        """
+
+
+
+class snapshots_partner:
+    """
+    Analysis tool of multiple snapshots, based on the class single_snapshot_partner.
+    """
+    def __init__(self, filenames, dir=".", target_datasets=[],):
+        """
+        filenames: list/tuple/numpy.array of strings, which contains the filenames of the snapshots.
+
+        dir: string, directory of the snapshot files, default=current directory.
+
+        target_datasets: a list/tuple/numpy.array of strs, specify the interested datasets (PartType0, for example), 
+        default=[].
+        """
+        self.__snapshots = [] # list of the snapshots
+        
+        for i in filenames:
+            self.__snapshots.append(single_snapshot_partner(filename = i, dir=dir, target_datasets=target_datasets,\
+                    autoanalysis = True));
+
+        self.__bar_strengths = [snapshot.get_bar_strength() for snapshot in self.__snapshots] # bar strength parameters
+        self.get_bar_strengths = lambda: tuple(self.__bar_strengths) # secure API to return bar strength parameters
+
+
+
+
