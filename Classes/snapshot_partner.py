@@ -80,7 +80,7 @@ class single_snapshot_partner:
         if autoanalysis:
             # readin data
             self.readdata()
-            self.recenter()
+            self.recenter(sphere_size=100)
             self.calculate_cylindrical_coordinates()
             self.calculate_bar_strength()
             self.calculate_buckling_strength()
@@ -216,9 +216,9 @@ class single_snapshot_partner:
             for id in np.where(Rs<=1e-3)[0]:
                 Phis.insert(id, np.random.rand()*np.pi*2)
                 # deal with R=0 particle(s) with random azimuthal angles
-            Phis = np.array(Phis)
+            Phis = np.arctan2( self.__coordinates[index, 1] - self.__system_center[1], self.__coordinates[index, 0] - self.__system_center[0])
         else:
-            Phis = np.arcsin( (self.__coordinates[:, 1]-self.__system_center[1])/Rs )
+            Phis = np.arctan2( self.__coordinates[:, 1] - self.__system_center[1], self.__coordinates[:, 0] - self.__system_center[0])
 
         Phis[ np.where(Phis<0)[0] ] += np.pi*2 # normalized the range to [0, 2pi]
 
