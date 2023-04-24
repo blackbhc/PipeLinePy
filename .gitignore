@@ -1,9 +1,17 @@
 *.swp
 tests
 test
+temp
+tmpes
 test.py
 temp.py
 *.hdf5
 *.ipynb
 .ipynb_checkpoints
 *.dat
+*.png
+*.pdf
+*.pyc
+__pyche__
+*pyche*
+*.o
