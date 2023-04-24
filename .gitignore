@@ -6,3 +6,4 @@ temp.py
 *.hdf5
 *.ipynb
 .ipynb_checkpoints
+*.dat
