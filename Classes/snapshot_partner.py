@@ -49,6 +49,8 @@ class single_snapshot_partner:
         self.get_bar_semi_length = lambda: self.__bar_semi_length
         self.__buckling_strength = None # the buckling strength
         self.get_buckling_strength = lambda: self.__buckling_strength
+        self.__has_mass = False # whether has mass in the snapshot
+        self.has_mass = lambda: self.__has_mass # API
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
         self.__has_potential = False # check whther there are potential datasets
@@ -60,6 +62,15 @@ class single_snapshot_partner:
                 pass
             else:
                 self.__has_potential = True
+                break
+        
+        for key in self.dataset_keys:
+            try:
+                self.snapshot[key]['Masses']
+            except:
+                pass
+            else:
+                self.__has_mass = True
                 break
         
         if autoanalysis:
@@ -90,12 +101,13 @@ class single_snapshot_partner:
             self.data.append(self.snapshot[target])
 
         # read in the coordinates and masses target particles
-        self.__coordinates = []; self.__masses = []
+        self.__coordinates = []
+        if self.has_mass(): self.__masses = []
         for subset in self.data:
             self.__coordinates.append(subset["Coordinates"][...])
-            self.__masses.append(subset["Masses"][...])
+            if self.has_mass(): self.__masses.append(subset["Masses"][...])
         self.__coordinates = np.row_stack(self.__coordinates)
-        self.__masses = np.squeeze(np.column_stack(self.__masses))
+        if self.has_mass(): self.__masses = np.squeeze(np.column_stack(self.__masses))
 
         if self.has_potential():
             self.__potentials = []
@@ -144,7 +156,7 @@ class single_snapshot_partner:
                 index = index[np.where( np.abs( (self.__coordinates - self.__system_center)[index, 1] ) <= box_size/2)[0]]
                 index = index[np.where( np.abs( (self.__coordinates - self.__system_center)[index, 2] ) <= box_size/2)[0]]
             else:
-                index = [i for i in range(len(self.__masses))] # the full index
+                index = [i for i in range(len(self.__coordinates))] # the full index
 
             if self.has_potential():
                 potentials_sorted = self.__potentials*1.0
@@ -153,9 +165,14 @@ class single_snapshot_partner:
                 # the boundary of the most bounded particles
                 index = np.array(index)[ np.where( self.__potentials[index]<=bounded_boundary )[0] ]
 
-            cur_coord = self.__coordinates[index, :]
-            cur_mass = self.__masses[index]
-            new = np.sum( cur_coord * np.column_stack( (cur_mass, cur_mass, cur_mass) ), axis = 0 ) / np.sum(cur_mass)
+            if self.has_mass():
+                cur_coord = self.__coordinates[index, :]
+                cur_mass = self.__masses[index]
+                new = np.sum( cur_coord * np.column_stack( (cur_mass, cur_mass, cur_mass) ), axis = 0 ) / np.sum(cur_mass)
+            else:
+                cur_coord = self.__coordinates[index, :]
+                new = np.sum( cur_coord , axis = 0 ) / len(cur_coord)
+
             self.__system_center = new
             variation = np.linalg.norm(new - old, ord=2)
 
@@ -219,8 +236,12 @@ class single_snapshot_partner:
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
-        numerator = (self.__masses[index] * np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
-        denominator = self.__masses[index].sum()
+        if self.has_mass():
+            numerator = (self.__masses[index] * np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
+            denominator = self.__masses[index].sum()
+        else:
+            numerator = (np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
+            denominator = len(numerator)
 
         self.__bar_strength = abs(numerator / denominator)
         return self.get_bar_strength()
@@ -234,9 +255,14 @@ class single_snapshot_partner:
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
-        numerator = (self.__cylindrical_coordiantes[index, 2] * self.__masses[index] *
-                     np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
-        denominator = self.__masses[index].sum()
+        if self.has_mass():
+            numerator = (self.__cylindrical_coordiantes[index, 2] * self.__masses[index] *
+                         np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
+            denominator = self.__masses[index].sum()
+        else:
+            numerator = (self.__cylindrical_coordiantes[index, 2] *
+                         np.exp(2j * self.__cylindrical_coordiantes[index, 1])).sum()
+            denominator = len(numerator)
 
         self.__buckling_strength = abs(numerator / denominator)
         return self.get_buckling_strength()
