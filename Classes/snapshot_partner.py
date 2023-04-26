@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 import h5py
 from scipy.stats import binned_statistic as bin1d
-from scipy.fftpack import fft
+from scipy.stats import binned_statistic_2d as bin2d
 
 class single_snapshot_partner:
     """
@@ -87,7 +87,6 @@ class single_snapshot_partner:
             self.calculate_cylindrical_coordinates()
             self.calculate_bar_strength()
             self.calculate_buckling_strength()
-            self.annulus_fourier_analysis()
             self.calculate_bar_major_axis()
 
         # prompts
@@ -253,6 +252,11 @@ class single_snapshot_partner:
         Calculate the bar strength parameter.
 
         region_size: only particles with cylindrical radius < region_size are quantified.
+        
+        --------
+        Returns:
+
+        bar_strength: dimensionless bar strength parameter.
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
@@ -272,6 +276,11 @@ class single_snapshot_partner:
         Calculate the buckling strength parameter.
 
         region_size: only particles with cylindrical radius < region_size are quantified.
+        
+        --------
+        Returns:
+
+        buckling_strength: the buckling strength dimensionless parameter.
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
@@ -288,109 +297,32 @@ class single_snapshot_partner:
         return self.get_buckling_strength()
 
 
-    #  def annulus_fourier_analysis(self, minradius=0.0, maxradius=15, bins=21, inLgbins=False, azimuthal_bins=36):
-    #      """
-    #      Calculate the fourier coefficient A2 and it's phase angle for annuluses in the face-on image of the system.
-    #
-    #      minradius: the inner most radius for the calculation.
-    #
-    #      maxradius: the outer most radius for the calculation.
-    #
-    #      bins: binnum of the annuluses during calculation.
-    #
-    #      inLgbins: if True, the bins will be linear bewteen lg(minradius) and lg(maxradius)
-    #
-    #      azimuthal_bins: binnum of azimuthal bins for different azimuthal_bins
-    #      """
-    #      # prompts
-    #      if self.__info :
-    #          print("Fourier analysis of different circular annulus ...", sep=' ')
-    #          if inLgbins:
-    #              print("(Annuluses are in logarithmically linear bins)")
-    #          else:
-    #              print("(Annuluses are in linear bins.)")
-    #
-    #      # defensive part
-    #      if minradius==0 and inLgbins:
-    #          minradius = 1e-1
-    #          print(f"Lg(0) is not possible, the program will use {minradius} as inner most raduis instead 0 ...")
-    #
-    #      # if inLgbins
-    #      if inLgbins:
-    #          minradius = np.log10(minradius)
-    #          maxradius = np.log10(maxradius)
-    #
-    #      bin_edges = np.linspace(minradius, maxradius, bins)
-    #      if inLgbins: bin_edges = 10**(bin_edges)
-    #      indexes = []
-    #      for i in range(len(bin_edges)-1):
-    #          index = np.where(self.__cylindrical_coordiantes[:, 0] >= bin_edges[i])[0]
-    #          index = np.array(index)[np.where(self.__cylindrical_coordiantes[index, 0] < bin_edges[i+1])[0]]
-    #          indexes.append(index)
-    #
-    #      # calculation part
-    #      A2 = []; Angles = [] # the A2 and major axis of different annuluses
-    #      for id in indexes:
-    #          # defensive: case that there is no particle in some inner/outer most bins
-    #          if len(id)==0:
-    #              A2.append(None)
-    #              angles.append(None)
-    #              continue
-    #
-    #          phis = self.__cylindrical_coordiantes[id, 1]
-    #          column_densitys, _, _ = bin1d(x = phis, values = phis, bins =\
-    #                  azimuthal_bins, statistic = "count")
-    #          column_densitys = self.__lg_norm1d(column_densitys)
-    #          column_densitys -= column_densitys.mean()
-    #          Freqs, results, angles = self.__simple_fourier_analysis(data = column_densitys)
-    #          A2.append(results[2])
-    #          Angles.append(angles[2])
-    #
-    #      self.__A2 = np.array(A2)
-    #      self.__m2_major_axis = np.array(Angles)
-    #      self.get_A2 = lambda: self.__A2
-    #      self.get_m2_major_axis = lambda: self.__m2_major_axis
-    #
-    #      # prompts
-    #      if self.__info : print("Fourier analysis of different circular annulus is done!")
-    #
-    #
-    #  def calculate_bar_major_axis(self, region_size=4, binnum=36):
-    #      """
-    #      Calculate the bar major axis in a cylindrical region as the m2 sysmetry mode's major axis.
-    #
-    #      region_size: radius of such cylindrical reigon.
-    #
-    #      binnum: number of bins for Fourier analysis.
-    #      """
-    #      index = np.where( self.__cylindrical_coordiantes[:, 0] <= region_size)[0]
-    #      index = index[np.where( self.__cylindrical_coordiantes[index, 2] <= 0.25)[0]]
-    #      column_densitys, _,_ = bin1d(x = self.__cylindrical_coordiantes[index, 1], values = \
-    #              self.__cylindrical_coordiantes[index, 1], statistic = "count", bins=binnum,)
-    #
-    #      column_densitys = self.__lg_norm1d(column_densitys)
-    #      _, _, angle = self.__simple_fourier_analysis(data = column_densitys)
-    #
-    #      self.__bar_major_axis = angle[2]
-    #
-    #  # some utils functions
-    #  def __lg_norm1d(self, array):
-    #      data = array*1.0
-    #      index = np.where(data<1)[0]
-    #      data[index] = 1
-    #      data = np.log10(data)
-    #      return data
-    #
-    #  def __simple_fourier_analysis(self, data):
-    #      N = len(data)
-    #      results = np.abs( fft(x = data)) / N * 2 # normalization
-    #      angles = np.angle( fft(x = data))
-    #      results[0] /= 2 # further normalization of A0
-    #      Freqs = np.arange(int(N / 2))
-    #      results = results[range(int(N / 2))] # only positive side
-    #      angles = angles[range(int(N / 2))] # only positive side
-    #      return Freqs, results, angles
-    def calculate_major_axis(self, region_size)
+    def calculate_bar_major_axis(self, region_size=10, binnum=180):
+        """
+        Calculate the bar major axis of the system, which is the azimuthal direction of maximal particles.
+
+        region_size: double, specify the region used in calculation, only R<10 particles by default.
+
+        binnum: the number of azimuthal bins, somehow resolution of this algorithm.
+
+        --------
+        Returns:
+
+        phi: the azimuthal angle of bar major axis, in unit [rad]
+        """
+        # prompts
+        if self.__info: print("Calculating the bar major axis in the X-Y plane ...")
+
+        index = np.where(self.__cylindrical_coordiantes[:,0] < region_size)[0]
+        counts, edges, _ = bin1d(x = self.__cylindrical_coordiantes[index, 1], values = self.__cylindrical_coordiantes[index, 1],\
+                statistic = "count", bins=binnum)
+        # debug: single max is too terrible
+        id = np.argmax(counts)
+        phi = (edges[id] + edges[id+1])/2
+        self.__bar_major_axis = phi
+
+        if self.__info: print("Calculation of bar major axis finished!")
+        return phi
 
 
 
@@ -410,16 +342,50 @@ class snapshots_partner:
         info: whether print the reminder message, as there are many snapshots, default=False
         """
         self.__snapshots = [] # list of the snapshots
+        self.__info = info
+        # prompts
+        if self.__info: print("Initializating the snapshots partner ...")
         
         for i in filenames:
             self.__snapshots.append(single_snapshot_partner(filename = i, dir=dir, target_datasets=target_datasets,\
                     autoanalysis = True, info=info));
 
-        self.__bar_strengths = [snapshot.get_bar_strength() for snapshot in self.__snapshots] # bar strength parameters
-        self.get_bar_strengths = lambda: tuple(self.__bar_strengths) # secure API to return bar strength parameters
-        self.__buckling_strengths = [snapshot.get_buckling_strength() for snapshot in self.__snapshots]
+        self.__bar_strengths = tuple(snapshot.get_bar_strength() for snapshot in self.__snapshots) # bar strength parameters
+        self.get_bar_strengths = lambda: self.__bar_strengths # secure API to return bar strength parameters
+        self.__buckling_strengths = tuple(snapshot.get_buckling_strength() for snapshot in self.__snapshots) # buckling strengths
         self.get_buckling_strengths = lambda: self.__buckling_strengths
+        self.__bar_major_axes = tuple(snapshot.get_bar_major_axis() for snapshot in self.__snapshots) # bar major axis
+        self.get_bar_major_axes = lambda: self.__bar_major_axes
+        self.get_snapshot_count = lambda: len(self.__snapshots)
+        self.__bar_pattern_speeds = None # pattern speeds of the bar
+        self.get_pattern_speeds = lambda: self.__bar_pattern_speeds
+
+        if self.__info: print("Initialization has been finished!")
 
 
+    def calculate_pattern_speeds(self, start=0, end=None, reverse=False):
+        """
+        Calculate the bar pattern speed with the azimuthal angles of the major axis.
 
+        start:double, time stamp of the first snapshot, 0 by default.
 
+        end: double, time stamp of the last snapshot, end=number of snapshots - 1 if not given.
+        
+        --------
+        Returns:
+
+        pattern_speed: n-1 double numpy.array, n is the count of snapshots, in unit [rad/time]
+        """
+        if self.__info: print("Calculating the pattern speed of the snapshots ...")
+        if not(end): end = self.get_snapshot_count() - 1
+
+        age_bin = (end - start) / (self.get_snapshot_count() - 1)
+
+        major_axis = self.get_bar_major_axes()
+        delta_phis = np.array(major_axis[1:]) - np.array(major_axis[:-1])
+        index = np.where(delta_phis < 0)[0]
+        delta_phis[index] += np.pi*2 # debug
+        self.__bar_pattern_speeds = delta_phis / age_bin
+
+        if self.__info: print("Calculation is done!")
+        return self.__bar_pattern_speeds
