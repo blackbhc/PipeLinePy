@@ -1,6 +1,8 @@
 import numpy as np
 import scipy as sp
 import h5py
+from scipy.stats import binned_statistic as bin1d
+from scipy.fftpack import fft
 
 class single_snapshot_partner:
     """
@@ -22,7 +24,7 @@ class single_snapshot_partner:
         info: whether print the reminder Information.
         """
 
-        # User uninsterested parts
+        # User uninsterested part
         self.__info = info
         if self.__info: print("Initializing the single snapshot partner object ...\n")
         # defensive part: check whether there is the target file
@@ -45,8 +47,8 @@ class single_snapshot_partner:
         # the model statistical quantifications
         self.__system_center = np.array([0, 0, 0]) # the center of the system
         self.get_system_center = lambda: self.__system_center # API to get the center of the system
-        self.__major_axis_angle = 0 # the azimuthal angle of major axis, in [rad]
-        self.get_major_axis_angle = lambda: self.__major_axis
+        self.__bar_major_axis = None # the azimuthal angle of major axis, in [rad]
+        self.get_bar_major_axis = lambda: self.__bar_major_axis
         self.__bar_strength = None # the bar strength
         self.get_bar_strength = lambda: self.__bar_strength
         self.__bar_semi_length = None # the half bar length, in [kpc]
@@ -55,6 +57,7 @@ class single_snapshot_partner:
         self.get_buckling_strength = lambda: self.__buckling_strength
         self.__has_mass = False # whether has mass in the snapshot
         self.has_mass = lambda: self.__has_mass # API
+        self.get_cylindrical_coordinates = lambda: self.__cylindrical_coordiantes
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
         self.__has_potential = False # check whther there are potential datasets
@@ -84,7 +87,10 @@ class single_snapshot_partner:
             self.calculate_cylindrical_coordinates()
             self.calculate_bar_strength()
             self.calculate_buckling_strength()
+            self.annulus_fourier_analysis()
+            self.calculate_bar_major_axis()
 
+        # prompts
         if self.__info: print("Initialization done!\n")
 
 
@@ -93,6 +99,7 @@ class single_snapshot_partner:
         Read in the data of interested datasets (specified by target_datatets) from snapshot files.
         Note: you can overwrite the target_datasets in this function, if you give a none empty value to it at here.
         """
+        # prompts
         if self.__info: print("Reading in the target datasets ...")
 
         if (target_datasets):
@@ -122,10 +129,12 @@ class single_snapshot_partner:
             self.__potentials = np.squeeze(np.column_stack(self.__potentials))
         # read in potentials if the snapshot has potential information
 
+        # prompts
         if self.__info: print("Read in datasets done!\n")
 
 
-    def recenter(self, sphere_size=None, box_size=None, MAXLOOP=1000):
+    #def recenter(self, sphere_size=None, box_size=None, MAXLOOP=1000):
+    def recenter(self, sphere_size=100, box_size=None, MAXLOOP=1000): #debug
         """
         Method to recenter the system (set of all target particles).
         
@@ -138,6 +147,7 @@ class single_snapshot_partner:
 
         MAXLOOP: the max times of the loop for recentering
         """
+        # prompts
         if self.__info: print("Recentering the system ...")
         self.recentered = False; self.get_recenter_status = lambda: self.recentered # whether have recentered
 
@@ -194,6 +204,7 @@ class single_snapshot_partner:
         # the API to return the convergence status of the recentering
         self.recentered = True
 
+        # prompts
         if self.__info: print("Recentering done!\n")
 
 
@@ -203,6 +214,7 @@ class single_snapshot_partner:
 
         Note: the cylindrical coordiantes are all w.r.t to the system center after recentering.
         """
+        # prompts
         if self.__info: print("Calculating the cylindrical coordinates of the system ...")
         if not(self.get_recenter_status): self.recenter() # recenter the system if haven't done it
 
@@ -223,6 +235,8 @@ class single_snapshot_partner:
         Phis[ np.where(Phis<0)[0] ] += np.pi*2 # normalized the range to [0, 2pi]
 
         self.__cylindrical_coordiantes = np.column_stack((Rs, Phis, self.__coordinates[:, 2]-self.__system_center[2]))
+
+        # prompts
         if self.__info: print("Calculate cylindrical coordiantes done!\n")
 
 
@@ -234,7 +248,7 @@ class single_snapshot_partner:
         """
 
 
-    def calculate_bar_strength(self, region_size=15):
+    def calculate_bar_strength(self, region_size=4):
         """
         Calculate the bar strength parameter.
 
@@ -250,10 +264,10 @@ class single_snapshot_partner:
             denominator = len(index)
 
         self.__bar_strength = abs(numerator / denominator)
-        return self.get_bar_strength()
+        return self.get_bar_strength(), np.angle(numerator)
 
     
-    def calculate_buckling_strength(self, region_size=15):
+    def calculate_buckling_strength(self, region_size=10):
         """
         Calculate the buckling strength parameter.
 
@@ -274,18 +288,109 @@ class single_snapshot_partner:
         return self.get_buckling_strength()
 
 
-    def calculate_fourier_coefficients(self, minradius=0.0, maxradius=20, bins=21, inlog=False):
-        """
-        Calculate the fourier coefficients A2, A4 ... for annuluses in the face-on image of the system.
-
-        minradius: the inner most radius for the calculation.
-
-        maxradius: the outer most radius for the calculation.
-
-        bins: binnum of the annuluses during calculation.
-
-        inlog: if True, the bins will be linear bewteen lg(minradius) and lg(maxradius)
-        """
+    #  def annulus_fourier_analysis(self, minradius=0.0, maxradius=15, bins=21, inLgbins=False, azimuthal_bins=36):
+    #      """
+    #      Calculate the fourier coefficient A2 and it's phase angle for annuluses in the face-on image of the system.
+    #
+    #      minradius: the inner most radius for the calculation.
+    #
+    #      maxradius: the outer most radius for the calculation.
+    #
+    #      bins: binnum of the annuluses during calculation.
+    #
+    #      inLgbins: if True, the bins will be linear bewteen lg(minradius) and lg(maxradius)
+    #
+    #      azimuthal_bins: binnum of azimuthal bins for different azimuthal_bins
+    #      """
+    #      # prompts
+    #      if self.__info :
+    #          print("Fourier analysis of different circular annulus ...", sep=' ')
+    #          if inLgbins:
+    #              print("(Annuluses are in logarithmically linear bins)")
+    #          else:
+    #              print("(Annuluses are in linear bins.)")
+    #
+    #      # defensive part
+    #      if minradius==0 and inLgbins:
+    #          minradius = 1e-1
+    #          print(f"Lg(0) is not possible, the program will use {minradius} as inner most raduis instead 0 ...")
+    #
+    #      # if inLgbins
+    #      if inLgbins:
+    #          minradius = np.log10(minradius)
+    #          maxradius = np.log10(maxradius)
+    #
+    #      bin_edges = np.linspace(minradius, maxradius, bins)
+    #      if inLgbins: bin_edges = 10**(bin_edges)
+    #      indexes = []
+    #      for i in range(len(bin_edges)-1):
+    #          index = np.where(self.__cylindrical_coordiantes[:, 0] >= bin_edges[i])[0]
+    #          index = np.array(index)[np.where(self.__cylindrical_coordiantes[index, 0] < bin_edges[i+1])[0]]
+    #          indexes.append(index)
+    #
+    #      # calculation part
+    #      A2 = []; Angles = [] # the A2 and major axis of different annuluses
+    #      for id in indexes:
+    #          # defensive: case that there is no particle in some inner/outer most bins
+    #          if len(id)==0:
+    #              A2.append(None)
+    #              angles.append(None)
+    #              continue
+    #
+    #          phis = self.__cylindrical_coordiantes[id, 1]
+    #          column_densitys, _, _ = bin1d(x = phis, values = phis, bins =\
+    #                  azimuthal_bins, statistic = "count")
+    #          column_densitys = self.__lg_norm1d(column_densitys)
+    #          column_densitys -= column_densitys.mean()
+    #          Freqs, results, angles = self.__simple_fourier_analysis(data = column_densitys)
+    #          A2.append(results[2])
+    #          Angles.append(angles[2])
+    #
+    #      self.__A2 = np.array(A2)
+    #      self.__m2_major_axis = np.array(Angles)
+    #      self.get_A2 = lambda: self.__A2
+    #      self.get_m2_major_axis = lambda: self.__m2_major_axis
+    #
+    #      # prompts
+    #      if self.__info : print("Fourier analysis of different circular annulus is done!")
+    #
+    #
+    #  def calculate_bar_major_axis(self, region_size=4, binnum=36):
+    #      """
+    #      Calculate the bar major axis in a cylindrical region as the m2 sysmetry mode's major axis.
+    #
+    #      region_size: radius of such cylindrical reigon.
+    #
+    #      binnum: number of bins for Fourier analysis.
+    #      """
+    #      index = np.where( self.__cylindrical_coordiantes[:, 0] <= region_size)[0]
+    #      index = index[np.where( self.__cylindrical_coordiantes[index, 2] <= 0.25)[0]]
+    #      column_densitys, _,_ = bin1d(x = self.__cylindrical_coordiantes[index, 1], values = \
+    #              self.__cylindrical_coordiantes[index, 1], statistic = "count", bins=binnum,)
+    #
+    #      column_densitys = self.__lg_norm1d(column_densitys)
+    #      _, _, angle = self.__simple_fourier_analysis(data = column_densitys)
+    #
+    #      self.__bar_major_axis = angle[2]
+    #
+    #  # some utils functions
+    #  def __lg_norm1d(self, array):
+    #      data = array*1.0
+    #      index = np.where(data<1)[0]
+    #      data[index] = 1
+    #      data = np.log10(data)
+    #      return data
+    #
+    #  def __simple_fourier_analysis(self, data):
+    #      N = len(data)
+    #      results = np.abs( fft(x = data)) / N * 2 # normalization
+    #      angles = np.angle( fft(x = data))
+    #      results[0] /= 2 # further normalization of A0
+    #      Freqs = np.arange(int(N / 2))
+    #      results = results[range(int(N / 2))] # only positive side
+    #      angles = angles[range(int(N / 2))] # only positive side
+    #      return Freqs, results, angles
+    def calculate_major_axis(self, region_size)
 
 
 
