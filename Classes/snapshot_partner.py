@@ -3,6 +3,7 @@ import scipy as sp
 import h5py
 from scipy.stats import binned_statistic as bin1d
 from scipy.stats import binned_statistic_2d as bin2d
+from scipy.signal import argrelmax
 
 class single_snapshot_partner:
     """
@@ -83,7 +84,7 @@ class single_snapshot_partner:
         if autoanalysis:
             # readin data
             self.readdata()
-            self.recenter(sphere_size=100)
+            self.recenter(sphere_size=1000)
             self.calculate_cylindrical_coordinates()
             self.calculate_bar_strength()
             self.calculate_buckling_strength()
@@ -132,8 +133,7 @@ class single_snapshot_partner:
         if self.__info: print("Read in datasets done!\n")
 
 
-    #def recenter(self, sphere_size=None, box_size=None, MAXLOOP=1000):
-    def recenter(self, sphere_size=100, box_size=None, MAXLOOP=1000): #debug
+    def recenter(self, sphere_size=None, box_size=None, MAXLOOP=1000):
         """
         Method to recenter the system (set of all target particles).
         
@@ -297,13 +297,15 @@ class single_snapshot_partner:
         return self.get_buckling_strength()
 
 
-    def calculate_bar_major_axis(self, region_size=10, binnum=180):
+    def calculate_bar_major_axis(self, region_size=5, binnum=90):
         """
         Calculate the bar major axis of the system, which is the azimuthal direction of maximal particles.
 
-        region_size: double, specify the region used in calculation, only R<10 particles by default.
+        region_size: double, specify the region used in calculation, only particles that R<region_size are
+        included in calculation, and ~ half semi major axis of the bar is a recommended value.
 
-        binnum: the number of azimuthal bins, somehow resolution of this algorithm.
+        binnum: the number of azimuthal bins, somehow resolution of this algorithm, to avoid noise 90~180
+        is recommended.
 
         --------
         Returns:
@@ -314,15 +316,48 @@ class single_snapshot_partner:
         if self.__info: print("Calculating the bar major axis in the X-Y plane ...")
 
         index = np.where(self.__cylindrical_coordiantes[:,0] < region_size)[0]
-        counts, edges, _ = bin1d(x = self.__cylindrical_coordiantes[index, 1], values = self.__cylindrical_coordiantes[index, 1],\
-                statistic = "count", bins=binnum)
-        # debug: single max is too terrible
-        id = np.argmax(counts)
-        phi = (edges[id] + edges[id+1])/2
-        self.__bar_major_axis = phi
+        statistic, edges = np.histogram(self.__cylindrical_coordiantes[index, 1], bins=binnum, density=True) 
+        # calculate the 1-d density information
+        phis = (edges[:-1] + edges[1:])/2 # the azimuthal angles
+        mean, std = np.mean(statistic), np.std(statistic) # used to find peaks
+        over_density_index = np.where(statistic > mean+std)[0] # determined as possible positions of peaks
+        phis = phis[over_density_index]
+        statistic = statistic[over_density_index]
+        locs = argrelmax(statistic) # id of the possible peak positions
+        phis = phis[locs]
+        statistic = statistic[locs]
+        try:
+            try:
+                # the jump position to distinguish the two sides of the bar
+                jump_id = np.where(phis[1:] - phis[:-1] > np.pi/2)[0][0]  + 1
+                lower = phis[:jump_id]
+                upper = phis[jump_id:]
+                if len(lower)>2: lower = self.__exclude_one_sigma(lower)
+                if len(upper)>2: upper = self.__exclude_one_sigma(upper)
+                loc1 = np.mean(lower)
+                loc2 = np.mean(upper)
+                phi = (loc1 + loc2 + np.pi) / 2
+            except:
+                if len(phis)>2: phis = self.__exclude_one_sigma(phis)
+                phi = np.mean(phis)
+            self.__bar_major_axis = phi
+        except:
+            self.__bar_major_axis = None
 
         if self.__info: print("Calculation of bar major axis finished!")
         return phi
+
+    def __exclude_one_sigma(self, data):
+        """
+        Exclude the data points of the input 1-D outside the one sigma region.
+        """
+        data = np.array(data)
+        if len(data.shape)!=1: raise ValueError("Only allow 1-D array in this function(exclude_one_sigma)")
+        mean = np.mean(data)
+        std = np.std(data)
+        index = np.where(data >= mean-std)[0]
+        index = index[np.where(data[index] <= mean+std)[0]]
+        return data[index]
 
 
 
