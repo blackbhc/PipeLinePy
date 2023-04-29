@@ -268,9 +268,7 @@ class single_snapshot_partner:
             denominator = len(index)
 
         self.__bar_strength = abs(numerator / denominator)
-        self.__fourier_m2_angle = np.angle(numerator) # debug
-        self.get_fourier_m2_angle = lambda: self.__fourier_m2_angle # debug
-        return self.get_bar_strength(), np.angle(numerator)
+        return self.get_bar_strength()
 
     
     def calculate_buckling_strength(self, region_size=10):
@@ -299,12 +297,12 @@ class single_snapshot_partner:
         return self.get_buckling_strength()
 
 
-    def calculate_bar_major_axis(self, region_size=5, binnum=90):
+    def calculate_bar_major_axis(self, region_size=5, binnum=180):
         """
         Calculate the bar major axis of the system, which is the azimuthal direction of maximal particles.
 
         region_size: double, specify the region used in calculation, only particles that R<region_size are
-        included in calculation, and ~ half semi major axis of the bar is a recommended value.
+        included in calculation, and 0.5~1 semi major axis of the bar is a recommended value.
 
         binnum: the number of azimuthal bins, somehow resolution of this algorithm, to avoid noise 90~180
         is recommended.
@@ -342,6 +340,9 @@ class single_snapshot_partner:
             except:
                 if len(phis)>2: phis = self.__exclude_one_sigma(phis)
                 phi = np.mean(phis)
+            while(phi > np.pi):
+                phi -= np.pi
+                # shape the range into [0, pi]
             self.__bar_major_axis = phi
         except:
             self.__bar_major_axis = None
@@ -416,13 +417,26 @@ class snapshots_partner:
         if self.__info: print("Calculating the pattern speed of the snapshots ...")
         if not(end): end = self.get_snapshot_count() - 1
 
+        times = np.arange( self.get_snapshot_count ) / (self.get_snapshot_count() - 1) * (end -start) + start 
+        # the time stamps of the time sequences
+        plt.figure(figsize=(10, 4))
+        plt.plot(times, angles/np.pi)
+        plt.plot(times, np.ones(len(angles)))
+        plt.ylabel(r"$\phi/\pi$ [rad]")
+        if end:
+            plt.xlabel("t [Gyr]")
+        else:
+            plt.xlabel("t [snapshot count]")
+        plt.savefig("Pattern_Speed-doublecheck.png", dpi=800)
+
         age_bin = (end - start) / (self.get_snapshot_count() - 1)
 
         major_axis = self.get_bar_major_axes()
         delta_phis = np.array(major_axis[1:]) - np.array(major_axis[:-1])
-        index = np.where(delta_phis < 0)[0]
-        delta_phis[index] += np.pi*2 # debug
-        self.__bar_pattern_speeds = delta_phis / age_bin
+        pattern_speeds = delta_phis / age_bin
+
+        index_positive = np.where # development
+
 
         if self.__info: print("Calculation is done!")
         return self.__bar_pattern_speeds
