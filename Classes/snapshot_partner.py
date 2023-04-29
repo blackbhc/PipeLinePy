@@ -268,6 +268,8 @@ class single_snapshot_partner:
             denominator = len(index)
 
         self.__bar_strength = abs(numerator / denominator)
+        self.__fourier_m2_angle = np.angle(numerator) # debug
+        self.get_fourier_m2_angle = lambda: self.__fourier_m2_angle # debug
         return self.get_bar_strength(), np.angle(numerator)
 
     
