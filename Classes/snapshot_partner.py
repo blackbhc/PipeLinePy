@@ -428,23 +428,10 @@ class snapshots_partner:
         if not(end): end = self.get_snapshot_count() - 1
 
         times = np.arange( self.get_snapshot_count() ) / (self.get_snapshot_count() - 1) * (end -start) + start 
-        # the time stamps of the time sequences
-        from matplotlib import pyplot as plt
-        angles = np.array(self.get_bar_major_axes())
-        plt.figure(figsize=(10, 4))
-        plt.plot(times, angles/np.pi)
-        plt.plot(times, np.ones(len(angles)))
-        plt.ylabel(r"$\phi/\pi$ [rad]")
-        if end:
-            plt.xlabel("t [Gyr]")
-        else:
-            plt.xlabel("t [snapshot count]")
-        plt.savefig("Pattern_Speed-doublecheck.png", dpi=800)
-
         age_bin = (end - start) / (self.get_snapshot_count() - 1)
 
-        major_axis = self.get_bar_major_axes()
-        delta_phis = np.array(major_axis[1:]) - np.array(major_axis[:-1])
+        major_axis = np.array(self.get_bar_major_axes())
+        delta_phis = major_axis[1:] - major_axis[:-1]
         bar_pattern_speeds = delta_phis / age_bin
 
         index_positive = np.where(bar_pattern_speeds > 0)[0]
@@ -462,3 +449,27 @@ class snapshots_partner:
 
         if self.__info: print("Calculation is done!")
         return self.__bar_pattern_speeds
+
+
+    def calculate_monotone_bar_major_axes(self):
+        """
+        Shape the major axes' angles into a monotone sequence.
+        """
+        if self.__info: print("The angles will be revised into a monotone sequence.")
+        angles = np.array(self.get_bar_major_axes())
+        delta_phis = angles[1:] - angles[:-1]
+        index_positive = np.where(delta_phis > 0)[0]
+        index_negative = np.where(delta_phis <= 0)[0]
+        N_positive = len(index_positive)
+        N_negative = len(index_negative)
+        clockwise = False if N_positive>N_negative else True # whether clockwise rotation
+
+        for i in range(0, len(angles)-1):
+            if angles[i+1] < angles[i] and not(clockwise):
+                angles[i+1:] += np.pi
+            elif angles[i+1] > angles[i] and clockwise:
+                angles[i+1:] -= np.pi
+
+        self.__bar_major_axes = tuple(angles)
+        return angles
+
