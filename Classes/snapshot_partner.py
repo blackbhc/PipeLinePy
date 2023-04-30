@@ -247,7 +247,7 @@ class single_snapshot_partner:
         """
 
 
-    def calculate_bar_strength(self, region_size=4):
+    def calculate_bar_strength(self, region_size=6):
         """
         Calculate the bar strength parameter.
 
@@ -271,7 +271,7 @@ class single_snapshot_partner:
         return self.get_bar_strength()
 
     
-    def calculate_buckling_strength(self, region_size=10):
+    def calculate_buckling_strength(self, region_size=4):
         """
         Calculate the buckling strength parameter.
 
