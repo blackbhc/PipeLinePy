@@ -297,7 +297,7 @@ class single_snapshot_partner:
         return self.get_buckling_strength()
 
 
-    def calculate_bar_major_axis(self, region_size=5, binnum=180):
+    def calculate_bar_major_axis(self, region_size=3, binnum=180):
         """
         Calculate the bar major axis of the system, which is the azimuthal direction of maximal particles.
 
@@ -327,9 +327,11 @@ class single_snapshot_partner:
         phis = phis[locs]
         statistic = statistic[locs]
         try:
-            try:
-                # the jump position to distinguish the two sides of the bar
-                jump_id = np.where(phis[1:] - phis[:-1] > np.pi/2)[0][0]  + 1
+            # the jump position to distinguish the two sides of the bar
+            jump_ids = np.where(phis[1:] - phis[:-1] > np.pi/2)[0]
+            # bug fixed: if the bar major axis ~ 0 rad, then there may be two jump point
+            if len(jump_ids)==1:
+                jump_id = jump_ids[0] + 1
                 lower = phis[:jump_id]
                 upper = phis[jump_id:]
                 if len(lower)>2: lower = self.__exclude_one_sigma(lower)
@@ -337,7 +339,13 @@ class single_snapshot_partner:
                 loc1 = np.mean(lower)
                 loc2 = np.mean(upper)
                 phi = (loc1 + loc2 + np.pi) / 2
-            except:
+            elif len(jump_ids)==2:
+                jump_id1, jump_id2 = tuple(jump_ids + 1)
+                phis = phis[jump_id1:jump_id2]
+                if len(phis)>2: phis = self.__exclude_one_sigma(phis)
+                phi = np.mean(phis)
+            else:
+                # 0 jump and noisy case
                 if len(phis)>2: phis = self.__exclude_one_sigma(phis)
                 phi = np.mean(phis)
             while(phi > np.pi):
@@ -345,7 +353,9 @@ class single_snapshot_partner:
                 # shape the range into [0, pi]
             self.__bar_major_axis = phi
         except:
-            self.__bar_major_axis = None
+            # there is no reliable phi available
+            phi = None
+            self.__bar_major_axis = phi
 
         if self.__info: print("Calculation of bar major axis finished!")
         return phi
@@ -396,12 +406,12 @@ class snapshots_partner:
         self.get_bar_major_axes = lambda: self.__bar_major_axes
         self.get_snapshot_count = lambda: len(self.__snapshots)
         self.__bar_pattern_speeds = None # pattern speeds of the bar
-        self.get_pattern_speeds = lambda: self.__bar_pattern_speeds
+        self.get_bar_pattern_speeds = lambda: self.__bar_pattern_speeds
 
         if self.__info: print("Initialization has been finished!")
 
 
-    def calculate_pattern_speeds(self, start=0, end=None, reverse=False):
+    def calculate_bar_pattern_speeds(self, start=0, end=None):
         """
         Calculate the bar pattern speed with the azimuthal angles of the major axis.
 
@@ -412,13 +422,15 @@ class snapshots_partner:
         --------
         Returns:
 
-        pattern_speed: n-1 double numpy.array, n is the count of snapshots, in unit [rad/time]
+        bar_pattern_speeds: n-1 double numpy.array, n is the count of snapshots, in unit [rad/time]
         """
         if self.__info: print("Calculating the pattern speed of the snapshots ...")
         if not(end): end = self.get_snapshot_count() - 1
 
-        times = np.arange( self.get_snapshot_count ) / (self.get_snapshot_count() - 1) * (end -start) + start 
+        times = np.arange( self.get_snapshot_count() ) / (self.get_snapshot_count() - 1) * (end -start) + start 
         # the time stamps of the time sequences
+        from matplotlib import pyplot as plt
+        angles = np.array(self.get_bar_major_axes())
         plt.figure(figsize=(10, 4))
         plt.plot(times, angles/np.pi)
         plt.plot(times, np.ones(len(angles)))
@@ -433,10 +445,20 @@ class snapshots_partner:
 
         major_axis = self.get_bar_major_axes()
         delta_phis = np.array(major_axis[1:]) - np.array(major_axis[:-1])
-        pattern_speeds = delta_phis / age_bin
+        bar_pattern_speeds = delta_phis / age_bin
 
-        index_positive = np.where # development
+        index_positive = np.where(bar_pattern_speeds > 0)[0]
+        index_negative = np.where(bar_pattern_speeds <= 0)[0]
+        N_positive = len(index_positive)
+        N_negative = len(index_negative)
+        if N_positive >= N_negative:
+            # anticlockwise rotation
+            bar_pattern_speeds[index_negative] = (delta_phis[index_negative] + np.pi) / age_bin
+        else:
+            # clockwise ration
+            bar_pattern_speeds[index_positive] = (delta_phis[index_positive] - np.pi) / age_bin
 
+        self.__bar_pattern_speeds = bar_pattern_speeds
 
         if self.__info: print("Calculation is done!")
         return self.__bar_pattern_speeds
