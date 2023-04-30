@@ -1,6 +1,9 @@
 import numpy as np
 import scipy as sp
 import h5py
+from scipy.stats import binned_statistic as bin1d
+from scipy.stats import binned_statistic_2d as bin2d
+from scipy.signal import argrelmax
 
 class single_snapshot_partner:
     """
@@ -22,7 +25,7 @@ class single_snapshot_partner:
         info: whether print the reminder Information.
         """
 
-        # User uninsterested parts
+        # User uninsterested part
         self.__info = info
         if self.__info: print("Initializing the single snapshot partner object ...\n")
         # defensive part: check whether there is the target file
@@ -45,8 +48,8 @@ class single_snapshot_partner:
         # the model statistical quantifications
         self.__system_center = np.array([0, 0, 0]) # the center of the system
         self.get_system_center = lambda: self.__system_center # API to get the center of the system
-        self.__major_axis_angle = 0 # the azimuthal angle of major axis, in [rad]
-        self.get_major_axis_angle = lambda: self.__major_axis
+        self.__bar_major_axis = None # the azimuthal angle of major axis, in [rad]
+        self.get_bar_major_axis = lambda: self.__bar_major_axis
         self.__bar_strength = None # the bar strength
         self.get_bar_strength = lambda: self.__bar_strength
         self.__bar_semi_length = None # the half bar length, in [kpc]
@@ -55,6 +58,7 @@ class single_snapshot_partner:
         self.get_buckling_strength = lambda: self.__buckling_strength
         self.__has_mass = False # whether has mass in the snapshot
         self.has_mass = lambda: self.__has_mass # API
+        self.get_cylindrical_coordinates = lambda: self.__cylindrical_coordiantes
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
         self.__has_potential = False # check whther there are potential datasets
@@ -80,11 +84,13 @@ class single_snapshot_partner:
         if autoanalysis:
             # readin data
             self.readdata()
-            self.recenter(sphere_size=100)
+            self.recenter(sphere_size=1000)
             self.calculate_cylindrical_coordinates()
             self.calculate_bar_strength()
             self.calculate_buckling_strength()
+            self.calculate_bar_major_axis()
 
+        # prompts
         if self.__info: print("Initialization done!\n")
 
 
@@ -93,6 +99,7 @@ class single_snapshot_partner:
         Read in the data of interested datasets (specified by target_datatets) from snapshot files.
         Note: you can overwrite the target_datasets in this function, if you give a none empty value to it at here.
         """
+        # prompts
         if self.__info: print("Reading in the target datasets ...")
 
         if (target_datasets):
@@ -122,6 +129,7 @@ class single_snapshot_partner:
             self.__potentials = np.squeeze(np.column_stack(self.__potentials))
         # read in potentials if the snapshot has potential information
 
+        # prompts
         if self.__info: print("Read in datasets done!\n")
 
 
@@ -138,6 +146,7 @@ class single_snapshot_partner:
 
         MAXLOOP: the max times of the loop for recentering
         """
+        # prompts
         if self.__info: print("Recentering the system ...")
         self.recentered = False; self.get_recenter_status = lambda: self.recentered # whether have recentered
 
@@ -194,6 +203,7 @@ class single_snapshot_partner:
         # the API to return the convergence status of the recentering
         self.recentered = True
 
+        # prompts
         if self.__info: print("Recentering done!\n")
 
 
@@ -203,6 +213,7 @@ class single_snapshot_partner:
 
         Note: the cylindrical coordiantes are all w.r.t to the system center after recentering.
         """
+        # prompts
         if self.__info: print("Calculating the cylindrical coordinates of the system ...")
         if not(self.get_recenter_status): self.recenter() # recenter the system if haven't done it
 
@@ -223,6 +234,8 @@ class single_snapshot_partner:
         Phis[ np.where(Phis<0)[0] ] += np.pi*2 # normalized the range to [0, 2pi]
 
         self.__cylindrical_coordiantes = np.column_stack((Rs, Phis, self.__coordinates[:, 2]-self.__system_center[2]))
+
+        # prompts
         if self.__info: print("Calculate cylindrical coordiantes done!\n")
 
 
@@ -234,11 +247,16 @@ class single_snapshot_partner:
         """
 
 
-    def calculate_bar_strength(self, region_size=15):
+    def calculate_bar_strength(self, region_size=4):
         """
         Calculate the bar strength parameter.
 
         region_size: only particles with cylindrical radius < region_size are quantified.
+        
+        --------
+        Returns:
+
+        bar_strength: dimensionless bar strength parameter.
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
@@ -253,11 +271,16 @@ class single_snapshot_partner:
         return self.get_bar_strength()
 
     
-    def calculate_buckling_strength(self, region_size=15):
+    def calculate_buckling_strength(self, region_size=10):
         """
         Calculate the buckling strength parameter.
 
         region_size: only particles with cylindrical radius < region_size are quantified.
+        
+        --------
+        Returns:
+
+        buckling_strength: the buckling strength dimensionless parameter.
         """
         index = np.where( self.__cylindrical_coordiantes[:, 0] < region_size )[0]
         
@@ -274,18 +297,80 @@ class single_snapshot_partner:
         return self.get_buckling_strength()
 
 
-    def calculate_fourier_coefficients(self, minradius=0.0, maxradius=20, bins=21, inlog=False):
+    def calculate_bar_major_axis(self, region_size=3, binnum=180):
         """
-        Calculate the fourier coefficients A2, A4 ... for annuluses in the face-on image of the system.
+        Calculate the bar major axis of the system, which is the azimuthal direction of maximal particles.
 
-        minradius: the inner most radius for the calculation.
+        region_size: double, specify the region used in calculation, only particles that R<region_size are
+        included in calculation, and 0.5~1 semi major axis of the bar is a recommended value.
 
-        maxradius: the outer most radius for the calculation.
+        binnum: the number of azimuthal bins, somehow resolution of this algorithm, to avoid noise 90~180
+        is recommended.
 
-        bins: binnum of the annuluses during calculation.
+        --------
+        Returns:
 
-        inlog: if True, the bins will be linear bewteen lg(minradius) and lg(maxradius)
+        phi: the azimuthal angle of bar major axis, in unit [rad]
         """
+        # prompts
+        if self.__info: print("Calculating the bar major axis in the X-Y plane ...")
+
+        index = np.where(self.__cylindrical_coordiantes[:,0] < region_size)[0]
+        statistic, edges = np.histogram(self.__cylindrical_coordiantes[index, 1], bins=binnum, density=True) 
+        # calculate the 1-d density information
+        phis = (edges[:-1] + edges[1:])/2 # the azimuthal angles
+        mean, std = np.mean(statistic), np.std(statistic) # used to find peaks
+        over_density_index = np.where(statistic > mean+std)[0] # determined as possible positions of peaks
+        phis = phis[over_density_index]
+        statistic = statistic[over_density_index]
+        locs = argrelmax(statistic) # id of the possible peak positions
+        phis = phis[locs]
+        statistic = statistic[locs]
+        try:
+            # the jump position to distinguish the two sides of the bar
+            jump_ids = np.where(phis[1:] - phis[:-1] > np.pi/2)[0]
+            # bug fixed: if the bar major axis ~ 0 rad, then there may be two jump point
+            if len(jump_ids)==1:
+                jump_id = jump_ids[0] + 1
+                lower = phis[:jump_id]
+                upper = phis[jump_id:]
+                if len(lower)>2: lower = self.__exclude_one_sigma(lower)
+                if len(upper)>2: upper = self.__exclude_one_sigma(upper)
+                loc1 = np.mean(lower)
+                loc2 = np.mean(upper)
+                phi = (loc1 + loc2 + np.pi) / 2
+            elif len(jump_ids)==2:
+                jump_id1, jump_id2 = tuple(jump_ids + 1)
+                phis = phis[jump_id1:jump_id2]
+                if len(phis)>2: phis = self.__exclude_one_sigma(phis)
+                phi = np.mean(phis)
+            else:
+                # 0 jump and noisy case
+                if len(phis)>2: phis = self.__exclude_one_sigma(phis)
+                phi = np.mean(phis)
+            while(phi > np.pi):
+                phi -= np.pi
+                # shape the range into [0, pi]
+            self.__bar_major_axis = phi
+        except:
+            # there is no reliable phi available
+            phi = None
+            self.__bar_major_axis = phi
+
+        if self.__info: print("Calculation of bar major axis finished!")
+        return phi
+
+    def __exclude_one_sigma(self, data):
+        """
+        Exclude the data points of the input 1-D outside the one sigma region.
+        """
+        data = np.array(data)
+        if len(data.shape)!=1: raise ValueError("Only allow 1-D array in this function(exclude_one_sigma)")
+        mean = np.mean(data)
+        std = np.std(data)
+        index = np.where(data >= mean-std)[0]
+        index = index[np.where(data[index] <= mean+std)[0]]
+        return data[index]
 
 
 
@@ -305,16 +390,75 @@ class snapshots_partner:
         info: whether print the reminder message, as there are many snapshots, default=False
         """
         self.__snapshots = [] # list of the snapshots
+        self.__info = info
+        # prompts
+        if self.__info: print("Initializating the snapshots partner ...")
         
         for i in filenames:
             self.__snapshots.append(single_snapshot_partner(filename = i, dir=dir, target_datasets=target_datasets,\
                     autoanalysis = True, info=info));
 
-        self.__bar_strengths = [snapshot.get_bar_strength() for snapshot in self.__snapshots] # bar strength parameters
-        self.get_bar_strengths = lambda: tuple(self.__bar_strengths) # secure API to return bar strength parameters
-        self.__buckling_strengths = [snapshot.get_buckling_strength() for snapshot in self.__snapshots]
+        self.__bar_strengths = tuple(snapshot.get_bar_strength() for snapshot in self.__snapshots) # bar strength parameters
+        self.get_bar_strengths = lambda: self.__bar_strengths # secure API to return bar strength parameters
+        self.__buckling_strengths = tuple(snapshot.get_buckling_strength() for snapshot in self.__snapshots) # buckling strengths
         self.get_buckling_strengths = lambda: self.__buckling_strengths
+        self.__bar_major_axes = tuple(snapshot.get_bar_major_axis() for snapshot in self.__snapshots) # bar major axis
+        self.get_bar_major_axes = lambda: self.__bar_major_axes
+        self.get_snapshot_count = lambda: len(self.__snapshots)
+        self.__bar_pattern_speeds = None # pattern speeds of the bar
+        self.get_bar_pattern_speeds = lambda: self.__bar_pattern_speeds
+
+        if self.__info: print("Initialization has been finished!")
 
 
+    def calculate_bar_pattern_speeds(self, start=0, end=None):
+        """
+        Calculate the bar pattern speed with the azimuthal angles of the major axis.
 
+        start:double, time stamp of the first snapshot, 0 by default.
 
+        end: double, time stamp of the last snapshot, end=number of snapshots - 1 if not given.
+        
+        --------
+        Returns:
+
+        bar_pattern_speeds: n-1 double numpy.array, n is the count of snapshots, in unit [rad/time]
+        """
+        if self.__info: print("Calculating the pattern speed of the snapshots ...")
+        if not(end): end = self.get_snapshot_count() - 1
+
+        times = np.arange( self.get_snapshot_count() ) / (self.get_snapshot_count() - 1) * (end -start) + start 
+        # the time stamps of the time sequences
+        from matplotlib import pyplot as plt
+        angles = np.array(self.get_bar_major_axes())
+        plt.figure(figsize=(10, 4))
+        plt.plot(times, angles/np.pi)
+        plt.plot(times, np.ones(len(angles)))
+        plt.ylabel(r"$\phi/\pi$ [rad]")
+        if end:
+            plt.xlabel("t [Gyr]")
+        else:
+            plt.xlabel("t [snapshot count]")
+        plt.savefig("Pattern_Speed-doublecheck.png", dpi=800)
+
+        age_bin = (end - start) / (self.get_snapshot_count() - 1)
+
+        major_axis = self.get_bar_major_axes()
+        delta_phis = np.array(major_axis[1:]) - np.array(major_axis[:-1])
+        bar_pattern_speeds = delta_phis / age_bin
+
+        index_positive = np.where(bar_pattern_speeds > 0)[0]
+        index_negative = np.where(bar_pattern_speeds <= 0)[0]
+        N_positive = len(index_positive)
+        N_negative = len(index_negative)
+        if N_positive >= N_negative:
+            # anticlockwise rotation
+            bar_pattern_speeds[index_negative] = (delta_phis[index_negative] + np.pi) / age_bin
+        else:
+            # clockwise ration
+            bar_pattern_speeds[index_positive] = (delta_phis[index_positive] - np.pi) / age_bin
+
+        self.__bar_pattern_speeds = bar_pattern_speeds
+
+        if self.__info: print("Calculation is done!")
+        return self.__bar_pattern_speeds
