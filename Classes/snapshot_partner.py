@@ -1,9 +1,11 @@
+import os
 import numpy as np
 import scipy as sp
 import h5py
 from scipy.stats import binned_statistic as bin1d
 from scipy.stats import binned_statistic_2d as bin2d
 from scipy.signal import argrelmax
+import imageio
 
 class single_snapshot_partner:
     """
@@ -473,3 +475,35 @@ class snapshots_partner:
         self.__bar_major_axes = tuple(angles)
         return angles
 
+    def create_movie(self, figdir, box_width=10, box_height=1, binnum=100, fps=7, fix=False):
+        """
+        Creat the movie of the simulation snapshots.
+
+        figdir: string, directory to restore the created movie.
+
+        box_width: positive double or int, |x| and |y| < box_width particles will be shown.
+
+        box_height: similar to box_width but for |z|.
+
+        binnum: number of bins in face-on and edge-on images.
+
+        fps: positive int, fps of the movie.
+
+        fix: bool, whether fixed to the bar major axis in the movie.
+        """
+        # defensive part: check and creat target directory
+        try:
+            path = figdir
+            if not(os.path.exists(path)): os.makedirs(path))
+        except:
+            print("Please specify where to storage the movie!")
+            raise ValueError("figdir is not given!")
+
+        # prompts
+        if self.__info: print("Creating the movie of the snapshots ...")
+
+
+
+
+        # prompts
+        if self.__info: print("Creating movie finished!")
