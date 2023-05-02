@@ -61,6 +61,7 @@ class single_snapshot_partner:
         self.__has_mass = False # whether has mass in the snapshot
         self.has_mass = lambda: self.__has_mass # API
         self.get_cylindrical_coordinates = lambda: self.__cylindrical_coordiantes
+        self.get_coordinates = lambda: self.__coordinates # API
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
         self.__has_potential = False # check whther there are potential datasets
@@ -474,36 +475,3 @@ class snapshots_partner:
 
         self.__bar_major_axes = tuple(angles)
         return angles
-
-    def create_movie(self, figdir, box_width=10, box_height=1, binnum=100, fps=7, fix=False):
-        """
-        Creat the movie of the simulation snapshots.
-
-        figdir: string, directory to restore the created movie.
-
-        box_width: positive double or int, |x| and |y| < box_width particles will be shown.
-
-        box_height: similar to box_width but for |z|.
-
-        binnum: number of bins in face-on and edge-on images.
-
-        fps: positive int, fps of the movie.
-
-        fix: bool, whether fixed to the bar major axis in the movie.
-        """
-        # defensive part: check and creat target directory
-        try:
-            path = figdir
-            if not(os.path.exists(path)): os.makedirs(path))
-        except:
-            print("Please specify where to storage the movie!")
-            raise ValueError("figdir is not given!")
-
-        # prompts
-        if self.__info: print("Creating the movie of the snapshots ...")
-
-
-
-
-        # prompts
-        if self.__info: print("Creating movie finished!")
