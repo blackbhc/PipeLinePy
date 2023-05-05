@@ -1,9 +1,11 @@
+import os
 import numpy as np
 import scipy as sp
 import h5py
 from scipy.stats import binned_statistic as bin1d
 from scipy.stats import binned_statistic_2d as bin2d
 from scipy.signal import argrelmax
+import imageio
 
 class single_snapshot_partner:
     """
@@ -59,6 +61,7 @@ class single_snapshot_partner:
         self.__has_mass = False # whether has mass in the snapshot
         self.has_mass = lambda: self.__has_mass # API
         self.get_cylindrical_coordinates = lambda: self.__cylindrical_coordiantes
+        self.get_coordinates = lambda: self.__coordinates # API
 
         # data check: whether potential and OtF data (Unfinished!!!!!)
         self.__has_potential = False # check whther there are potential datasets
@@ -472,4 +475,3 @@ class snapshots_partner:
 
         self.__bar_major_axes = tuple(angles)
         return angles
-
