@@ -95,6 +95,7 @@ class single_snapshot_partner:
 
         # prompts
         if self.__info: print("Initialization done!\n")
+        self.snapshot.close()
 
 
     def readdata(self, target_datasets=None):
