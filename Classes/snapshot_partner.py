@@ -1,10 +1,10 @@
+# TODO: add in an awosome process bar.
 import os
 import numpy as np
 import scipy as sp
 import h5py
 from scipy.stats import binned_statistic as bin1d
 from scipy.stats import binned_statistic_2d as bin2d
-from scipy.signal import argrelmax
 import imageio
 
 
@@ -62,7 +62,7 @@ class single_snapshot_partner:
             lambda: self.__system_center
         )  # API to get the center of the system
         self.__bar_major_axis = None  # the azimuthal angle of major axis, in [rad]
-        self.get_bar_major_axis = lambda: self.__bar_major_axis
+        self.get_bar_major_axis = lambda: self.calculate_bar_major_axis()
         self.__bar_strength = None  # the bar strength
         self.get_bar_strength = lambda: self.__bar_strength
         self.__bar_semi_length = None  # the half bar length, in [kpc]
@@ -336,14 +336,6 @@ class single_snapshot_partner:
             denominator = len(index)
 
         self.__bar_strength = abs(numerator / denominator)
-        # nested dev parts
-        print(
-            f"Real: {numerator.real}, Imag: {numerator.imag},\nRatio: {numerator.imag/numerator.real}"
-        )
-        self.__m2_axis = np.angle(numerator)
-        print(np.angle(numerator), np.arctan2(numerator.imag, numerator.real))
-        self.get_m2_axis = lambda: self.__m2_axis
-        # end of nested dev parts
         return self.get_bar_strength()
 
     def calculate_buckling_strength(self, region_size=4):
@@ -376,15 +368,16 @@ class single_snapshot_partner:
         self.__buckling_strength = abs(numerator / denominator)
         return self.get_buckling_strength()
 
-    def calculate_bar_major_axis(self, region_size=2.5, binnum=180):
+    def calculate_bar_major_axis(self, region_size=3, method=1):
         """
         Calculate the bar major axis of the system, which is the azimuthal direction of maximal particles.
 
         region_size: double, specify the region used in calculation, only particles that R<region_size are
         included in calculation, and 0.5~1 semi major axis of the bar is a recommended value.
 
-        binnum: the number of azimuthal bins, somehow resolution of this algorithm, to avoid noise 90~180
-        is recommended.
+        method: method used to calculate the bar major axis, must be one of (0, 1).
+        0: major axis anlge:=the argument angle of the m=2 symmetry component of the mass distribution, namely A2.
+        1: major axis angle:=the eigen vector of the inertia tensor of the system which has the maximal eigenvalue.
 
         --------
         Returns:
@@ -395,59 +388,59 @@ class single_snapshot_partner:
         if self.__info:
             print("Calculating the bar major axis in the X-Y plane ...")
 
-        index = np.where(self.__cylindrical_coordiantes[:, 0] < region_size)[0]
-        statistic, edges = np.histogram(
-            self.__cylindrical_coordiantes[index, 1], bins=binnum, density=True
-        )
-        # calculate the 1-d density information
-        phis = (edges[:-1] + edges[1:]) / 2  # the azimuthal angles
-        mean, std = np.mean(statistic), np.std(statistic)  # used to find peaks
-        over_density_index = np.where(statistic > mean + std)[
-            0
-        ]  # determined as possible positions of peaks
-        phis = phis[over_density_index]
-        statistic = statistic[over_density_index]
-        locs = argrelmax(statistic)  # id of the possible peak positions
-        phis = phis[locs]
-        statistic = statistic[locs]
+        # defensive programming
+        if method not in [0, 1]:
+            raise ValueError("method must be one of (0, 1)!")
+
+        # check whether the cylindrical coordinates are calculated
         try:
-            # the jump position to distinguish the two sides of the bar
-            jump_ids = np.where(phis[1:] - phis[:-1] > np.pi / 2)[0]
-            # bug fixed: if the bar major axis ~ 0 rad, then there may be two jump point
-            if len(jump_ids) == 1:
-                jump_id = jump_ids[0] + 1
-                lower = phis[:jump_id]
-                upper = phis[jump_id:]
-                if len(lower) > 2:
-                    lower = self.__exclude_one_sigma(lower)
-                if len(upper) > 2:
-                    upper = self.__exclude_one_sigma(upper)
-                loc1 = np.mean(lower)
-                loc2 = np.mean(upper)
-                phi = (loc1 + loc2 + np.pi) / 2
-            elif len(jump_ids) == 2:
-                jump_id1, jump_id2 = tuple(jump_ids + 1)
-                phis = phis[jump_id1:jump_id2]
-                if len(phis) > 2:
-                    phis = self.__exclude_one_sigma(phis)
-                phi = np.mean(phis)
-            else:
-                # 0 jump and noisy case
-                if len(phis) > 2:
-                    phis = self.__exclude_one_sigma(phis)
-                phi = np.mean(phis)
-            while phi > np.pi:
-                phi -= np.pi
-                # shape the range into [0, pi]
-            self.__bar_major_axis = phi
+            self.__cylindrical_coordiantes
         except:
-            # there is no reliable phi available
-            phi = None
-            self.__bar_major_axis = phi
+            self.calculate_cylindrical_coordinates()
+
+        index = np.where(self.__cylindrical_coordiantes[:, 0] < region_size)[0]
+        # index of particles in the target region
+
+        if method == 0:  # major axis angle := arg(A2)
+            # the similar code as in calculate_bar_strength, but here we only need numerator (A2)
+            if self.has_mass():
+                numerator = (
+                    self.__masses[index]
+                    * np.exp(2j * self.__cylindrical_coordiantes[index, 1])
+                ).sum()
+            else:
+                numerator = (
+                    np.exp(2j * self.__cylindrical_coordiantes[index, 1])
+                ).sum()
+            self.__bar_major_axis = (
+                np.angle(numerator) / 2
+            )  # the azimuthal angle of bar major axis
+        else:
+            if not (self.get_recenter_status):
+                self.recenter(sphere_size=1000)
+            pos = self.get_coordinates() - self.get_system_center()
+
+            # calculate the inertia tensor
+            inertia_tensor = np.zeros((3, 3))
+            inertia_tensor[0, 0] = np.sum(pos[index, 1] ** 2 + pos[index, 2] ** 2)
+            inertia_tensor[1, 1] = np.sum(pos[index, 0] ** 2 + pos[index, 2] ** 2)
+            inertia_tensor[2, 2] = np.sum(pos[index, 0] ** 2 + pos[index, 1] ** 2)
+            inertia_tensor[0, 1] = -np.sum(pos[index, 0] * pos[index, 1])
+            inertia_tensor[0, 2] = -np.sum(pos[index, 0] * pos[index, 2])
+            inertia_tensor[1, 2] = -np.sum(pos[index, 1] * pos[index, 2])
+            inertia_tensor[1, 0] = inertia_tensor[0, 1]
+            inertia_tensor[2, 0] = inertia_tensor[0, 2]
+            inertia_tensor[2, 1] = inertia_tensor[1, 2]
+            eigval, eigvec = np.linalg.eig(inertia_tensor)
+            print(eigval)
+            id = np.argmin(eigval)  # calculate the maximal eigenvalue
+            self.__bar_major_axis = np.arctan2(
+                eigvec[1, id], eigvec[0, id]
+            )  # the azimuthal angle of bar major axis
 
         if self.__info:
             print("Calculation of bar major axis finished!")
-        return phi
+        return self.__bar_major_axis
 
     def __exclude_one_sigma(self, data):
         """
