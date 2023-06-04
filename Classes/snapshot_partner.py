@@ -438,7 +438,7 @@ class single_snapshot_partner:
             inertia_tensor[2, 0] = inertia_tensor[0, 2]
             inertia_tensor[2, 1] = inertia_tensor[1, 2]
             eigval, eigvec = np.linalg.eig(inertia_tensor)
-            id = np.argmin(eigval)  # calculate the maximal eigenvalue
+            id = np.argmin(eigval)  # calculate the minimal eigenvalue
             self.__bar_major_axis = np.arctan2(
                 eigvec[1, id], eigvec[0, id]
             )  # the azimuthal angle of bar major axis
