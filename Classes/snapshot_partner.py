@@ -1,4 +1,6 @@
 # TODO: add in an awosome process bar.
+# TODO: add in the plotting parts.
+# TODO: reconstruct the code to make it more readable: based on the scheme, and sperate the atributes and methods.
 import os
 import numpy as np
 import scipy as sp
@@ -62,7 +64,11 @@ class single_snapshot_partner:
             lambda: self.__system_center
         )  # API to get the center of the system
         self.__bar_major_axis = None  # the azimuthal angle of major axis, in [rad]
-        self.get_bar_major_axis = lambda: self.calculate_bar_major_axis()
+        self.get_bar_major_axis = (
+            lambda region_size=3, method=1: self.calculate_bar_major_axis(
+                region_size, method
+            )
+        )
         self.__bar_strength = None  # the bar strength
         self.get_bar_strength = lambda: self.__bar_strength
         self.__bar_semi_length = None  # the half bar length, in [kpc]
