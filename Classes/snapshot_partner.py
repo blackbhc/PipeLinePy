@@ -1,4 +1,5 @@
 # TODO: add in an awosome process bar.
+# TODO: add in a part to automatically align the major axis of angular momentum to the z-axis.
 # TODO: add in the plotting parts.
 # TODO: reconstruct the code to make it more readable: based on the scheme, and sperate the atributes and methods.
 import os
@@ -65,7 +66,7 @@ class single_snapshot_partner:
         )  # API to get the center of the system
         self.__bar_major_axis = None  # the azimuthal angle of major axis, in [rad]
         self.get_bar_major_axis = (
-            lambda region_size=3, method=1: self.calculate_bar_major_axis(
+            lambda region_size=3, method=0: self.calculate_bar_major_axis(
                 region_size, method
             )
         )
